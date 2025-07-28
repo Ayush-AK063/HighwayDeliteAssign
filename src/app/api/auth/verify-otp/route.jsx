@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import User from '@/models/User';
 import jwt from 'jsonwebtoken';
-import cookie from 'cookie';
+import { cookies } from 'next/headers';
 
 export async function POST(req) {
   let user; // Declare user in outer scope
@@ -53,17 +53,12 @@ export async function POST(req) {
   await user.save();
 
   // Set cookie with token
-  const response = NextResponse.json({ message: 'Logged in successfully' });
+  cookies().set('token', token, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  maxAge: 60 * 60 * 24,
+  path: '/',
+});
 
-  response.headers.set(
-    'Set-Cookie',
-    cookie.serialize('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24, // 1 day
-      path: '/',
-    })
-  );
-
-  return response;
+return NextResponse.json({ message: 'Logged in successfully' });
 }
