@@ -5,14 +5,23 @@ import jwt from 'jsonwebtoken';
 import cookie from 'cookie';
 
 export async function POST(req) {
-  await connectDB();
+  let user; // Declare user in outer scope
+  let token; // Declare token in outer scope
+  try{
+    await connectDB();
+  }
+   catch (error) {
+    return NextResponse.json({ message: 'Database connection failed', error }, { status: 500 }); 
+  }
+  try {
+
   const { email, otp } = await req.json();
 
   if (!email || !otp) {
     return NextResponse.json({ message: 'Email and OTP required' }, { status: 400 });
   }
 
-  const user = await User.findOne({ email });
+  user = await User.findOne({ email });
 
   if (!user) {
     return NextResponse.json({ message: 'User not found' }, { status: 404 });
@@ -22,11 +31,21 @@ export async function POST(req) {
   if (user.otp !== otp || user.otpExpiry < Date.now()) {
     return NextResponse.json({ message: 'Invalid or expired OTP' }, { status: 401 });
   }
+} catch (error) {
+    return NextResponse.json({ message: error }, { status: 500 });
+  }
 
+  try {
   // OTP is valid — log the user in
-  const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+  if (!process.env.JWT_SECRET) {
+    return NextResponse.json({ message: 'JWT secret not set' }, { status: 500 });
+  }
+  token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
     expiresIn: '1d',
   });
+} catch (error) {
+    return NextResponse.json({ message: 'Token generation failed', error }, { status: 500 });
+  }
 
   // Clear OTP after verification
   user.otp = undefined;
