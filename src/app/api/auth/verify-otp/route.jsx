@@ -1,0 +1,50 @@
+import { NextResponse } from 'next/server';
+import connectDB from '@/lib/db';
+import User from '@/models/User';
+import jwt from 'jsonwebtoken';
+import cookie from 'cookie';
+
+export async function POST(req) {
+  await connectDB();
+  const { email, otp } = await req.json();
+
+  if (!email || !otp) {
+    return NextResponse.json({ message: 'Email and OTP required' }, { status: 400 });
+  }
+
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    return NextResponse.json({ message: 'User not found' }, { status: 404 });
+  }
+
+  // Check OTP match and expiry
+  if (user.otp !== otp || user.otpExpiry < Date.now()) {
+    return NextResponse.json({ message: 'Invalid or expired OTP' }, { status: 401 });
+  }
+
+  // OTP is valid — log the user in
+  const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+    expiresIn: '1d',
+  });
+
+  // Clear OTP after verification
+  user.otp = undefined;
+  user.otpExpiry = undefined;
+  await user.save();
+
+  // Set cookie with token
+  const response = NextResponse.json({ message: 'Logged in successfully' });
+
+  response.headers.set(
+    'Set-Cookie',
+    cookie.serialize('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 24, // 1 day
+      path: '/',
+    })
+  );
+
+  return response;
+}
